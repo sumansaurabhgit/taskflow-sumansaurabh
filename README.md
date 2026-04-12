@@ -163,13 +163,219 @@ npm test
 
 What I'd improve:
 - Refresh token + HttpOnly cookies** — Eliminate token exposure in localStorage.
+- Authorization is ownership-based only (project owner / task creator).
+Tradeoff: Keeps permission logic straightforward for assignment scope.
+Production Improvement: Introduce team/workspace roles (admin/member/viewer).
+Notifications and audit logging execute inline with request lifecycle.
+Tradeoff: Simpler architecture for assignment scope.
+Production Improvement: Offload heavy side effects to background workers/queues.
 - Rate limiting** on `/auth/login` and `/auth/register`.
 - Kanban drag-and-drop UI** with `@dnd-kit` for visual status changes.
 - E2E tests with Playwright covering the full login → create project → assign task → SSE notification flow.
-- Pagination UI for tasks** — Currently loads first page only; add infinite scroll or "Load More".
+- The SSE implementation uses an in-memory subscriber registry (Map<userId, Set<Response>>) for simplicity.
+Tradeoff: This works well for a single-instance deployment but would not scale horizontally across multiple backend instances.
 - File attachments** on tasks via S3-compatible storage.
 - CI/CD pipeline** — GitHub Actions running lint, type-check, and tests on every PR.
 - History partitioning** — Archive audit records older than N days to keep query performance stable.
 - will make enhancement in the UI
 will integrate the email functionality
+
+
+
+POST	/auth/register	
+
+Request: {  "name":"suman",
+    "email": "test1@example.com",
+    "password": "password123"
+}
+
+Response:
+{
+    "user": {
+        "id": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+        "name": "suman",
+        "email": "test1@example.com"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3MmI1ZWRjMC02MzMyLTQwYTctYTdlNi1kYWMzNWE5ZGQ3YTkiLCJlbWFpbCI6InRlc3QxQGV4YW1wbGUuY29tIiwiaWF0IjoxNzc2MDAxMjQ0LCJleHAiOjE3NzYwODc2NDR9.CqDewuStz0Ch3qfxVQaTTv55q6yl98cvsgnsDGCPxms"
+}
+
+
+
+POST	/auth/login	
+
+Request:
+        {  
+    "email": "test1@example.com",
+    "password": "password123"
+        }
+
+Response:
+
+     {
+    "user": {
+        "id": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+        "name": "suman",
+        "email": "test1@example.com"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI3MmI1ZWRjMC02MzMyLTQwYTctYTdlNi1kYWMzNWE5ZGQ3YTkiLCJlbWFpbCI6InRlc3QxQGV4YW1wbGUuY29tIiwiaWF0IjoxNzc2MDA4OTM2LCJleHAiOjE3NzYwOTUzMzZ9.cKrWrYINNBtptEQPIFpvw_Afk98ETjnN3lGWLrpyzGY"
+}
+
+
+GET	/projects    http://localhost:4000/projects
+
+Response: 
+{
+    "data": [
+        {
+            "id": "16fc18b6-344b-4b46-a4f0-6f7887f6825b",
+            "name": "zira ticket",
+            "description": "abcdef",
+            "ownerId": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+            "createdAt": "2026-04-12T13:41:19.194Z",
+            "deletedAt": null,
+            "deletedBy": null,
+            "owner": {
+                "id": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+                "name": "suman",
+                "email": "test1@example.com"
+            },
+            "_count": {
+                "tasks": 3
+            }
+        }
+    ],
+    "nextCursor": null
+}
+
+
+POST	/projects	Create a project (owner = current user)   
+
+Request:
+{
+  "name": "My New Project",
+  "description": "A test project created via Postman"
+}
+
+Response:
+
+{
+    "id": "7effe002-5f51-430d-9ea2-fbaa7dca6f9d",
+    "name": "My New Project",
+    "description": "A test project created via Postman",
+    "ownerId": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+    "createdAt": "2026-04-12T15:56:40.640Z",
+    "deletedAt": null,
+    "deletedBy": null,
+    "owner": {
+        "id": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+        "name": "suman",
+        "email": "test1@example.com"
+    }
+}
+
+
+GET	/projects/:id	Get project details + its tasks
+
+Request:http://localhost:4000/projects/7effe002-5f51-430d-9ea2-fbaa7dca6f9d
+
+Response:
+ {
+    "id": "7effe002-5f51-430d-9ea2-fbaa7dca6f9d",
+    "name": "My New Project",
+    "description": "A test project created via Postman",
+    "ownerId": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+    "createdAt": "2026-04-12T15:56:40.640Z",
+    "deletedAt": null,
+    "deletedBy": null,
+    "owner": {
+        "id": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+        "name": "suman",
+        "email": "test1@example.com"
+    },
+    "_count": {
+        "tasks": 0
+    }
+}
+
+PATCH	/projects/:id	Update name/description (owner only)
+
+Request: http://localhost:4000/projects/7effe002-5f51-430d-9ea2-fbaa7dca6f9d
+
+{
+  "name": "Updated Project Name",
+  "description": "Updated description"
+}
+
+Response:
+{
+    "id": "7effe002-5f51-430d-9ea2-fbaa7dca6f9d",
+    "name": "Updated Project Name",
+    "description": "Updated description",
+    "ownerId": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+    "createdAt": "2026-04-12T15:56:40.640Z",
+    "deletedAt": null,
+    "deletedBy": null,
+    "owner": {
+        "id": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+        "name": "suman",
+        "email": "test1@example.com"
+    }
+}
+
+
+GET	/projects/:id/tasks	
+
+Request: http://localhost:4000/projects/7effe002-5f51-430d-9ea2-fbaa7dca6f9d/tasks
+
+Response: 
+{
+    "data": [
+        {
+            "id": "11517381-06d0-4078-91cd-498c555cd62d",
+            "title": "testing creating a tasks",
+            "description": "testing creating a tasks",
+            "status": "todo",
+            "priority": "medium",
+            "projectId": "7effe002-5f51-430d-9ea2-fbaa7dca6f9d",
+            "creatorId": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+            "dueDate": "2026-04-14T00:00:00.000Z",
+            "createdAt": "2026-04-12T16:10:09.809Z",
+            "updatedAt": "2026-04-12T16:10:09.809Z",
+            "deletedAt": null,
+            "deletedBy": null,
+            "assignees": [
+                {
+                    "taskId": "11517381-06d0-4078-91cd-498c555cd62d",
+                    "userId": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+                    "assignedAt": "2026-04-12T16:10:09.809Z",
+                    "user": {
+                        "id": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+                        "name": "suman",
+                        "email": "test1@example.com"
+                    }
+                },
+                {
+                    "taskId": "11517381-06d0-4078-91cd-498c555cd62d",
+                    "userId": "a18f80ad-a69f-46a3-8093-8f00e646af2e",
+                    "assignedAt": "2026-04-12T16:10:09.809Z",
+                    "user": {
+                        "id": "a18f80ad-a69f-46a3-8093-8f00e646af2e",
+                        "name": "Test User",
+                        "email": "test@example.com"
+                    }
+                }
+            ],
+            "creator": {
+                "id": "72b5edc0-6332-40a7-a7e6-dac35a9dd7a9",
+                "name": "suman",
+                "email": "test1@example.com"
+            }
+        }
+    ],
+    "nextCursor": null
+}
+
+
+
+
 
