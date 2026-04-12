@@ -1,6 +1,6 @@
 # TaskFlow
 
-A full-stack task management system with JWT authentication, project/task CRUD, real-time SSE notifications, and a responsive React UI.
+A full-stack task management system with JWT authentication, project/task CRUD, cursor pagination ,real-time SSE notifications, and a responsive React UI.
 
 ## Tech Stack
 
