@@ -1,173 +1,175 @@
 # TaskFlow
 
-A modern, full-stack task management system built as a take-home assignment. It features authentication, project management, real-time task tracking, and a dynamic and fully responsive UI.
+A full-stack task management system with JWT authentication, project/task CRUD, real-time SSE notifications, and a responsive React UI.
 
-## 🚀 Features Implemented
+## Tech Stack
 
-### Backend
-- **RESTful API**: Clean, standard Node.js Express server with isolated routes, controllers, services, and repositories.
-- **Relational Data**: Full PostgreSQL schema powered by Prisma ORM representing Users, Projects, and Tasks with proper constraints and indexing.
-- **Robust Authentication**: JWT-based authentication (24-hour expiry) secured via `bcrypt` (cost factor 12) with protected routes.
-- **Input Validation**: Strongly typed validation over request bodies and parameters using Zod.
-- **Cursor Pagination**: Clean cursor-based endpoints ensuring performance for `listByProject` task fetching.
-- **Real-Time Updates**: Native Server-Sent Events (SSE) streaming task creation, updates, and deletion back to listening clients instantly.
-- **Error Handling**: A custom, consistent `AppError` response envelope for mapping statuses (400, 401, 403, 404).
-
-### Frontend
-- **Polished UI/UX**: Built with React 19, Vite, and Tailwind CSS v4 to create a high-quality "premium" feel.
-- **Custom Components**: Clean, strictly typed component library (Buttons, Inputs, Textareas, Selects, Modals, Badges) minimizing external UI dependencies.
-- **Context API Management**: Global `AuthContext` with synchronized `localStorage` providing persistence across page reloads.
-- **Optimistic UI Styling**: Immediate UI feedback mapped when cycling through task statuses (To Do → In Progress → Done).
-- **Network Interceptors**: Axios configuration globally applying the JWT as a Bearer token and redirecting appropriately on 401 Unauthorized responses.
-
-### Infrastructure
-- **Containerization**: A full unified `docker-compose.yml` network running PostgreSQL, the Backend API, and Frontend application simultaneously.
-- **Automated Lifecycle**: Backend Dockerfile invokes a `docker-entrypoint.sh` script to independently deploy pending Prisma migrations and insert test data seeds prior to boot!
+| Layer | Technology |
+|-------|-----------|
+| Backend | Node.js, TypeScript, Express, Prisma ORM |
+| Database | PostgreSQL 16 |
+| Auth | JWT (24h expiry), bcrypt (cost 12) |
+| Validation | Zod |
+| Logging | Pino (structured JSON) |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS v4 |
+| Real-Time | Server-Sent Events (SSE) |
+| Infra | Docker, Docker Compose |
 
 ---
 
-## 🛠 Tech Stack
+## Running Locally
 
-| Layer      | Technology                                |
-|------------|-------------------------------------------|
-| Backend    | Node.js, TypeScript, Express, Prisma      |
-| Database   | PostgreSQL 16                             |
-| Auth       | JWT, bcrypt                               |
-| Frontend   | React 19, TypeScript, Vite, Tailwind CSS  |
-| Logging    | Pino (structured JSON logging)            |
-| Infra      | Docker, Docker Compose                    |
-
----
-
-## 💻 Running the Application
-
-### 🐳 Option A: Using Docker (Recommended)
-
-Prerequisites: Have Docker Desktop installed and running on your machine.
-
-1. Clone the repository and navigate into it.
-2. Ensure the environment variables are set (you can copy the example file):
-   ```bash
-   cp .env.example .env
-   ```
-3. Run the complete application layer:
-   ```bash
-   docker compose up --build
-   ```
-   *Note: This handles installing dependencies, initializing PostgreSQL, deploying Prisma migrations, and building the frontend.*
-
-4. Access the application:
-   - **Frontend App:** http://localhost:3000
-   - **Backend API:** http://localhost:4000
-   
-5. Log in with the pre-seeded testing credentials:
-   - **Email:** `test@example.com`
-   - **Password:** `password123`
-
-### 🖥 Option B: Manual Native Setup (Without Docker)
-
-You will need Node.js and a running PostgreSQL instance locally.
-
-**1. Setup the Database & Backend:**
 ```bash
-cd backend
-npm install
-
-# Connect your local Postgres by updating DATABASE_URL in backend/.env
-
-# Apply tables and input the predefined seed
-npx prisma migrate dev
-npx tsx src/seed.ts
-
-# Run the development server
-npm run dev
+git clone https://github.com/your-name/taskflow
+cd taskflow
+cp .env.example .env
+docker compose up --build
 ```
 
-**2. Setup the Frontend:**
-```bash
-# Open a new terminal
-cd frontend
-npm install
+- **Frontend:** http://localhost:3000
+- **Backend API:** http://localhost:4000
 
-# Run Vite dev server
-npm run dev
+Migrations, seed data, and dependency installs all run automatically on container start — zero manual steps.
+
+### Test Credentials
+
 ```
-*(The native local frontend will be running on `http://localhost:5173` instead of 3000).*
+Email:    test@example.com
+Password: password123
+```
+
+Seed includes 1 user, 1 project, and 3 tasks with different statuses (todo, in_progress, done).
+
+### Running Without Docker
+
+```bash
+# Backend
+cd backend && npm install
+npx prisma migrate dev && npx tsx src/seed.ts
+npm run dev
+
+# Frontend (separate terminal)
+cd frontend && npm install
+npm run dev   # → http://localhost:5173
+```
 
 ---
 
-## 🏗 Architecture Decisions & Implementation Rationale
+## Architecture Decisions
 
-### Advanced Relational Patterns
-
-TaskFlow implements enterprise-grade relational patterns over the standard PostgreSQL implementation:
-
-1. **Many-to-Many Assignments:** `TaskAssignment` handles bridging task and users securely. It protects against assignment duplication natively via the unique composite primary key `@@id([taskId, userId])`.
-2. **Audit History Trailing:** The `TaskHistory` and `ProjectHistory` tables operate via an unbounded append-only model. Mutations generate strict transactional diffs (extracting `oldValue` and `newValue`) saving only altered states rather than bloating the database with continuous full snapshots. *Note: In larger production implementations, these tables would run automated partitioning policies archiving historical data past predetermined timelines.*
-3. **Soft Deletion Mechanism:** The system abandons destructive `hard-delete` queries. When a Project or Task is dropped, it sets `deletedAt: DateTime` and `deletedBy`. Repositories default to excluding `deletedAt: null`. This preserves crucial linkages for maintaining aggregate compliance inside the Audit logs while keeping data isolated without foreign key cascades wiping trails.
-4. **Composite Cursor Pagination:** Cursor pagination guarantees O(1) skipping efficiency but faces sorting instability issues tracking generic IDs traversing newly updated rows. TaskFlow utilizes stable composite keys enforcing bounds across both `(createdAt, id)` mapping against strict descending limits. Native performance relies on standard multi-column definitions (e.g. `@@index([projectId, createdAt])` & `@@unique([createdAt, id])`).
+### Why This Structure
 
 ```
 backend/src/
-├── config/          # Environment configuration, Prisma instantiation
-├── controllers/     # HTTP route endpoints passing to services
-├── middlewares/      # Authentication, payload logging, error catching
-├── repositories/     # Database manipulation (Prisma Queries)
-├── routes/          # Express route definitions mappings
-├── services/        # Business logic containing validation (Zod)
-└── utils/           # JWT compilation, passwords, error configurations, SSE
+├── controllers/    → HTTP layer (parse req, send res)
+├── services/       → Business logic + Zod validation
+├── repositories/   → Prisma queries only
+├── middlewares/     → Auth, error handling, request logging
+├── routes/         → Express route definitions
+├── utils/          → JWT, password hashing, SSE manager, errors
+└── config/         → Environment + Prisma client
 ```
 
-**Methodology:**
-- **Separation of concerns**: Controllers never touch the database directly. Services coordinate business logic. Repositories handle database interactions.
-- **Zod Validation**: Replaced `express-validator` to natively extract TypeScript types from schema validators.
-- **Graceful Shutdown**: The API traps `SIGTERM/SIGINT` terminating the Prisma database correctly to avoid handle leaking.
+Strict **Controller → Service → Repository** layering. Controllers never touch the database. Services never touch `req`/`res`. This keeps each layer testable and replaceable independently.
 
-## 📡 API Reference
+### Key Tradeoffs
 
-#### Authentication
-| Method | Endpoint         | Description |
-|--------|------------------|-------------|
-| POST   | `/auth/register` | Create user (name, email, password) |
-| POST   | `/auth/login`    | Sign in (returns JWT) |
-| GET    | `/auth/users`    | Retrieve user collection |
+**Cursor pagination over offset pagination** — Offset pagination breaks under concurrent writes (rows shift, pages skip or duplicate items). Cursor-based pagination using composite keys `(createdAt, id)` provides stable, O(1) page traversal regardless of concurrent inserts or deletes. Backed by composite indexes (`@@index([projectId, createdAt])`, `@@unique([createdAt, id])`).
 
-#### Projects
-| Method | Endpoint            | Description |
-|--------|---------------------|-------------|
-| GET    | `/projects`         | Returns accessible projects `(?cursor=&limit=)` |
-| POST   | `/projects`         | Generate a new project |
-| GET    | `/projects/:id`     | Metadata for a specific project |
-| PATCH  | `/projects/:id`     | Alter description/name values |
-| DELETE | `/projects/:id`     | Drop a project structure and underlying tasks |
+**SSE over WebSocket** — This application only needs server-to-client push (new task assigned, task updated, task deleted). WebSocket adds bidirectional complexity, requires sticky sessions or Redis pub/sub for horizontal scaling, and a separate protocol upgrade path. SSE works over standard HTTP, auto-reconnects natively, and is sufficient for our one-way notification pattern.
 
-#### Tasks
-| Method | Endpoint            | Description |
-|--------|---------------------|-------------|
-| GET    | `/projects/:id/tasks`| Paginated/Filtered tasks `(?status=&assignee=)` |
-| POST   | `/projects/:id/tasks`| Add a task to project scope |
-| PATCH  | `/tasks/:id`        | Adjust specific task values/assignment |
-| DELETE | `/tasks/:id`        | Permanently remove a task |
+**Multi-assignee via join table instead of single `assignee_id`** — The spec defines a nullable `assignee_id`. We extended this to a `TaskAssignment` join table (`@@id([taskId, userId])`) supporting multiple assignees per task. Real-world task management rarely limits to one assignee. The composite primary key prevents duplicate assignments at the database level.
 
-#### Webhooks (Real-Time)
-| Method | Endpoint            | Description |
-|--------|---------------------|-------------|
-| GET    | `/events`           | Stream Server-Sent Events updates directly to the connection |
+**Zod over express-validator** — Zod schemas produce TypeScript types directly (`z.infer<typeof schema>`), giving compile-time safety on validated data. express-validator is imperative and doesn't integrate with the type system. Zod also composes cleanly for nested/optional fields.
+
+**Soft deletes over hard deletes** — Projects and tasks set `deletedAt` + `deletedBy` instead of being removed. This preserves audit trail integrity — history records still reference valid foreign keys. Repositories filter `deletedAt: null` by default.
+
+**Audit history as append-only diffs** — `TaskHistory` and `ProjectHistory` record `oldValue`/`newValue` per change, not full snapshots. This keeps storage lean while providing a complete mutation trail. Individual field changes (status, assignees added/removed) each get their own history entry.
+
+**Custom Tailwind component library** — Built Button, Input, Modal, Badge, Select, Textarea, and Toast components from scratch using Tailwind CSS v4. Chose this over shadcn/ui or Chakra to keep bundle size minimal and avoid dependency on a specific component library's release cycle. All components support dark mode.
+
+**App-level SSE connection** — The EventSource connection lives at the app root (`SSEProvider`), not inside individual pages. This ensures notifications arrive even when the user isn't on the project detail page — e.g., a user on the projects list gets a toast when assigned a new task in any project.
+
+### What's Implemented Beyond the Spec
+
+- **Real-time SSE notifications**: When a task is created/updated/deleted, all relevant users (assignees, creator, project owner) receive instant toast notifications. UI state updates incrementally without refetch.
+- **Audit history**: Every mutation (create, update, delete, assignee changes) is tracked with actor, timestamp, and diff.
+- **Soft deletes**: Data recovery possible; audit integrity preserved.
+- **Multi-assignee support**: Tasks can have multiple assignees with deduplication at the DB level.
+- **Dark mode**: Toggle persists across sessions via localStorage.
+- **Cursor pagination**: On both projects and tasks list endpoints.
+- **Stats endpoint**: `GET /projects/:id/stats` returns task counts by status and by assignee.
+- **15+ integration tests**: Auth, CRUD, authorization rules, filtering — all tested with Jest + Supertest.
+- **Optimistic UI**: Task status cycling updates instantly, reverts on API error.
+- **Graceful shutdown**: SIGTERM/SIGINT handlers close HTTP server and disconnect Prisma cleanly.
 
 ---
 
-## 🧪 Testing
+## API Reference
 
-The backend includes a `jest` and `supertest` suite. Ensure PostgreSQL is functioning locally with a connected `DATABASE_URL`.
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/auth/register` | Register (name, email, password) → returns JWT |
+| POST | `/auth/login` | Login (email, password) → returns JWT |
+| GET | `/auth/users` | List all users (for assignee selection) |
+
+### Projects
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/projects` | List accessible projects (`?cursor=&limit=`) |
+| POST | `/projects` | Create project (owner = current user) |
+| GET | `/projects/:id` | Get project details |
+| PATCH | `/projects/:id` | Update name/description (owner only) |
+| DELETE | `/projects/:id` | Soft-delete project (owner only) |
+| GET | `/projects/:id/stats` | Task counts by status and assignee |
+
+### Tasks
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/projects/:id/tasks` | List tasks (`?status=&assignee=&cursor=&limit=`) |
+| POST | `/projects/:id/tasks` | Create task with optional assignees |
+| PATCH | `/tasks/:id` | Update task (owner/creator/assignee) |
+| DELETE | `/tasks/:id` | Soft-delete task (owner/creator only) |
+
+### Real-Time Events
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/events?token=JWT` | SSE stream (task.assigned, task.updated, task.deleted) |
+
+All endpoints return `Content-Type: application/json`. Errors follow: `400` (validation with `{ error, fields }`), `401` (unauthenticated), `403` (forbidden), `404` (not found).
+
+---
+
+## Testing
+
 ```bash
 cd backend
 npm test
 ```
 
-## 🔮 What I'd Do With More Time
+15+ integration tests covering: registration, login, duplicate email, project CRUD, owner-only enforcement, task CRUD with authorization, status/assignee filtering.
 
-1. **Refresh token rotation** — Current JWT-only auth is constrained. Implementing an HttpOnly cookie-based refresh token with explicit rotation is vital for security.
-2. **Rate limiting** — Utilizing `express-rate-limit` against brute-force attempts on the `/auth/login` paths.
-3. **WebSocket upgrade** — SSE functions flawlessly for single-direction syncs, but WebSocket enables multi-user presence indicators (e.g. typing or viewing notifications).
-4. **Drag-and-drop kanban** — Adding UI arrays backed by `@dnd-kit` to visually drag tasks between `todo` and `in_progress`.
-5. **Team Workspaces** — Migrating `ownerId` boundaries over to an `Organization` relationship framework.
+---
+
+## What I'd Do With More Time
+
+**Shortcuts taken:**
+- **No down migrations** — Prisma generates forward-only SQL migrations. Manual rollback SQL wasn't added. In production, I'd write explicit down migrations or use a tool like `dbmate` alongside Prisma.
+- **No drag-and-drop** — Task status changes use click-to-cycle (optimistic). A kanban board with `@dnd-kit` would be the natural next step.
+- **No rate limiting** — Login and registration endpoints are unprotected against brute force. `express-rate-limit` is a quick add.
+- **No refresh token rotation** — Single JWT with 24h expiry. Production needs HttpOnly cookie-based refresh tokens with rotation.
+- **`fetchUsers` error is silent** — The assignee dropdown fails gracefully but doesn't notify the user.
+
+What I'd improve:
+- Refresh token + HttpOnly cookies** — Eliminate token exposure in localStorage.
+- Rate limiting** on `/auth/login` and `/auth/register`.
+- Kanban drag-and-drop UI** with `@dnd-kit` for visual status changes.
+- E2E tests with Playwright covering the full login → create project → assign task → SSE notification flow.
+- Pagination UI for tasks** — Currently loads first page only; add infinite scroll or "Load More".
+- File attachments** on tasks via S3-compatible storage.
+- CI/CD pipeline** — GitHub Actions running lint, type-check, and tests on every PR.
+- History partitioning** — Archive audit records older than N days to keep query performance stable.
+- will make enhancement in the UI
+will integrate the email functionality
+
