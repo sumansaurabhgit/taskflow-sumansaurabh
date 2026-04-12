@@ -33,9 +33,9 @@ COPY --from=builder /app/dist ./dist
 # Copy seed script source (needed at runtime for seeding)
 COPY src/seed.ts ./src/seed.ts
 
-# Copy entrypoint
+# Copy entrypoint and fix line endings (Windows CRLF → Unix LF)
 COPY docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
+RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 
 EXPOSE 4000
 
