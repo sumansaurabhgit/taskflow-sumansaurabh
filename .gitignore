@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+projectupdate.md
+frontend/ts_errors.txt
+frontend/tsc_error.txt

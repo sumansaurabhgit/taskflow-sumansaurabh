@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { authController } from '../controllers/authController';
+import { authMiddleware } from '../middlewares/auth';
+
+const router = Router();
+
+router.post('/register', (req, res, next) => authController.register(req, res, next));
+router.post('/login', (req, res, next) => authController.login(req, res, next));
+router.get('/users', authMiddleware, (req, res, next) => authController.getUsers(req, res, next));
+
+export { router as authRoutes };

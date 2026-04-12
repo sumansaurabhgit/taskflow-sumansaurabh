@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  done
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  DELETED
+  ASSIGNEE_ADDED
+  ASSIGNEE_REMOVED
+  ASSIGNEES_UPDATED
+}
+
+model User {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String
+  email      String    @unique
+  password   String
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  ownedProjects     Project[]
+  createdTasks      Task[]            @relation("TaskCreator")
+  assignments       TaskAssignment[]
+  projectHistories  ProjectHistory[]
+  taskHistories     TaskHistory[]
+
+  @@map("users")
+}
+
+model Project {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  ownerId     String    @map("owner_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  deletedAt   DateTime? @map("deleted_at")
+  deletedBy   String?   @map("deleted_by") @db.Uuid
+
+  owner   User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+  history ProjectHistory[]
+
+  @@unique([createdAt, id], name: "project_createdAt_id")
+  @@index([ownerId, createdAt, id])
+  @@map("projects")
+}
+
+model Task {
+  id          String       @id @default(uuid()) @db.Uuid
+  title       String
+  description String?
+  status      TaskStatus   @default(todo)
+  priority    TaskPriority @default(medium)
+  projectId   String       @map("project_id") @db.Uuid
+  creatorId   String       @map("creator_id") @db.Uuid
+  dueDate     DateTime?    @map("due_date") @db.Date
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  deletedAt   DateTime?    @map("deleted_at")
+  deletedBy   String?      @map("deleted_by") @db.Uuid
+
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator   User             @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  assignees TaskAssignment[]
+  history   TaskHistory[]
+
+  @@unique([createdAt, id], name: "task_createdAt_id")
+  @@index([projectId, createdAt, id])
+  @@index([status])
+  @@index([projectId, status])
+  @@map("tasks")
+}
+
+model TaskAssignment {
+  taskId     String   @map("task_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+  @@index([taskId])
+  @@map("task_assignments")
+}
+
+model ProjectHistory {
+  id        String      @id @default(uuid()) @db.Uuid
+  projectId String      @map("project_id") @db.Uuid
+  actorId   String      @map("actor_id") @db.Uuid
+  action    AuditAction
+  oldValue  Json?    @map("old_value")
+  newValue  Json?    @map("new_value")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor   User    @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, createdAt])
+  @@map("project_history")
+}
+
+model TaskHistory {
+  id        String      @id @default(uuid()) @db.Uuid
+  taskId    String      @map("task_id") @db.Uuid
+  actorId   String      @map("actor_id") @db.Uuid
+  action    AuditAction
+  oldValue  Json?    @map("old_value")
+  newValue  Json?    @map("new_value")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task  Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+  @@map("task_history")
+}
