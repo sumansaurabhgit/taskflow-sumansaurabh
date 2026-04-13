@@ -20,7 +20,7 @@ A full-stack task management system with JWT authentication, project/task CRUD, 
 ## Running Locally
 
 ```bash
-git clone https://github.com/your-name/taskflow
+git clone https://github.com/sumansaurabhgit/taskflow-sumansaurabh.git
 cd taskflow
 cp .env.example .env
 docker compose up --build
